@@ -1,0 +1,36 @@
+name: Test Action
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Akeyless Action
+        uses: ./
+        with:
+          access-id: ${{ secrets.AKEYLESS_ACCESS_ID }}
+          access-key: ${{ secrets.AKEYLESS_ACCESS_KEY }}
+          secret-path: /github-actions
+
+      - name: Verify secrets were exported
+        shell: bash
+        run: |
+          echo "Checking required variables..."
+          test -n "$SSH_HOST"
+          echo "✓ SSH_HOST is set"
+
+      - name: Verify masking
+        shell: bash
+        run: |
+          echo "These values should appear as *** in logs"
+          echo "$SSH_HOST"
