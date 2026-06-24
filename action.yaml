@@ -1,0 +1,81 @@
+name: Load Secrets from Akeyless
+description: Fetches secrets from Akeyless and exports them to GITHUB_ENV
+
+inputs:
+  access-id:
+    description: Akeyless Access ID
+    required: true
+
+  access-key:
+    description: Akeyless Access Key
+    required: true
+
+  secret-path:
+    description: Path of the secret in Akeyless
+    required: true
+
+runs:
+  using: composite
+
+  steps:
+    - name: Authenticate with Akeyless
+      shell: bash
+      env:
+        AKEYLESS_ACCESS_ID: ${{ inputs.access-id }}
+        AKEYLESS_ACCESS_KEY: ${{ inputs.access-key }}
+      run: |
+        TOKEN=$(curl -sf -X POST "https://api.akeyless.io/auth" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"access-id\": \"${AKEYLESS_ACCESS_ID}\",
+            \"access-key\": \"${AKEYLESS_ACCESS_KEY}\",
+            \"access-type\": \"api_key\"
+          }" | jq -r '.token')
+
+        if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "::error::Akeyless authentication failed"
+            exit 1
+        fi
+
+        echo "::add-mask::$TOKEN"
+        echo "AKEYLESS_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+
+    - name: Fetch secret
+      shell: bash
+      env:
+        SECRET_PATH: ${{ inputs.secret-path }}
+      run: |
+        SECRET_JSON=$(curl -sf -X POST "https://api.akeyless.io/get-secret-value" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"names\": [\"${SECRET_PATH}\"],
+            \"token\": \"${AKEYLESS_TOKEN}\"
+          }" | jq -c -r --arg path "$SECRET_PATH" '.[$path]')
+
+        if [ -z "$SECRET_JSON" ] || [ "$SECRET_JSON" = "null" ]; then
+            echo "::error::Failed to fetch secret: ${SECRET_PATH}"
+            exit 1
+        fi
+
+         echo "::add-mask::$SECRET_JSON"
+        {
+            echo "SECRET_JSON<<EOF"
+            echo "$SECRET_JSON"
+            echo "EOF"
+        } >> "$GITHUB_ENV"
+
+    - name: Export secrets
+      shell: bash
+      run: |
+        echo "$SECRET_JSON" |
+          jq -r 'to_entries[] | "\(.key)=\(.value)"' |
+          while IFS='=' read -r key value; do
+              echo "::add-mask::$value"
+              echo "$key=$value" >> "$GITHUB_ENV"
+          done
+
+    - name: Cleanup
+      shell: bash
+      run: |
+        echo "AKEYLESS_TOKEN=" >> "$GITHUB_ENV"
+        echo "SECRET_JSON=" >> "$GITHUB_ENV"
