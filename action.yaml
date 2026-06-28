@@ -62,7 +62,12 @@ runs:
         while IFS= read -r line; do
           key="${line%%=*}"
           value="${line#*=}"
+          # mask the full value
           echo "::add-mask::$value"
+          # mask each individual line 
+          while IFS= read -r vline; do
+            [ -n "$vline" ] && echo "::add-mask::$vline"
+          done <<< "$value"
           printf '%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
         done < <(echo "$SECRET_JSON" | jq -r 'to_entries[] | "\(.key)=\(.value)"')
 
