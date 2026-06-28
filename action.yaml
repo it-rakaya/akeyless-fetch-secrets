@@ -1,22 +1,17 @@
 name: Load Secrets from Akeyless
 description: Fetches secrets from Akeyless and exports them to GITHUB_ENV
-
 inputs:
   access-id:
     description: Akeyless Access ID
     required: true
-
   access-key:
     description: Akeyless Access Key
     required: true
-
   secret-path:
-    description: Path of the secret in Akeyless
+    description: Path of the secret in Akeyless (must be a JSON key-value object)
     required: true
-
 runs:
   using: composite
-
   steps:
     - name: Authenticate with Akeyless
       shell: bash
@@ -40,7 +35,7 @@ runs:
         echo "::add-mask::$TOKEN"
         echo "AKEYLESS_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
-    - name: Fetch secret
+    - name: Fetch and export secrets
       shell: bash
       env:
         SECRET_PATH: ${{ inputs.secret-path }}
@@ -57,36 +52,25 @@ runs:
           exit 1
         fi
 
+        if ! echo "$SECRET_JSON" | jq -e 'type == "object"' > /dev/null 2>&1; then
+          echo "::error::Secret at '${SECRET_PATH}' is not a JSON object. Only key-value secrets are supported."
+          exit 1
+        fi
+
         echo "::add-mask::$SECRET_JSON"
 
-        {
-          echo "SECRET_JSON<<EOF"
-          echo "$SECRET_JSON"
-          echo "EOF"
-        } >> "$GITHUB_ENV"
-
-    - name: Export secrets
-      shell: bash
-      env:
-        SECRET_JSON: ${{ env.SECRET_JSON }}
-      run: |
-        echo "$SECRET_JSON" |
-        jq -c 'to_entries[]' |
-        while read -r entry; do
-          key=$(echo "$entry" | jq -r '.key')
-          value=$(echo "$entry" | jq -r '.value')
-
+        while IFS= read -r line; do
+          key="${line%%=*}"
+          value="${line#*=}"
           echo "::add-mask::$value"
-
-          {
-            echo "$key<<EOF"
-            echo "$value"
-            echo "EOF"
-          } >> "$GITHUB_ENV"
-        done
+          printf '%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
+        done < <(echo "$SECRET_JSON" | jq -r 'to_entries[] | "\(.key)=\(.value)"')
 
     - name: Cleanup
+      if: always()
       shell: bash
       run: |
         echo "AKEYLESS_TOKEN=" >> "$GITHUB_ENV"
         echo "SECRET_JSON=" >> "$GITHUB_ENV"
+        unset AKEYLESS_TOKEN
+        unset SECRET_JSON
