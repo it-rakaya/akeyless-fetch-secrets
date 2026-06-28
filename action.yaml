@@ -33,8 +33,8 @@ runs:
           }" | jq -r '.token')
 
         if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-            echo "::error::Akeyless authentication failed"
-            exit 1
+          echo "::error::Akeyless authentication failed"
+          exit 1
         fi
 
         echo "::add-mask::$TOKEN"
@@ -53,26 +53,37 @@ runs:
           }" | jq -c -r --arg path "$SECRET_PATH" '.[$path]')
 
         if [ -z "$SECRET_JSON" ] || [ "$SECRET_JSON" = "null" ]; then
-            echo "::error::Failed to fetch secret: ${SECRET_PATH}"
-            exit 1
+          echo "::error::Failed to fetch secret: ${SECRET_PATH}"
+          exit 1
         fi
 
-         echo "::add-mask::$SECRET_JSON"
+        echo "::add-mask::$SECRET_JSON"
+
         {
-            echo "SECRET_JSON<<EOF"
-            echo "$SECRET_JSON"
-            echo "EOF"
+          echo "SECRET_JSON<<EOF"
+          echo "$SECRET_JSON"
+          echo "EOF"
         } >> "$GITHUB_ENV"
 
     - name: Export secrets
       shell: bash
+      env:
+        SECRET_JSON: ${{ env.SECRET_JSON }}
       run: |
         echo "$SECRET_JSON" |
-          jq -r 'to_entries[] | "\(.key)=\(.value)"' |
-          while IFS='=' read -r key value; do
-              echo "::add-mask::$value"
-              echo "$key=$value" >> "$GITHUB_ENV"
-          done
+        jq -c 'to_entries[]' |
+        while read -r entry; do
+          key=$(echo "$entry" | jq -r '.key')
+          value=$(echo "$entry" | jq -r '.value')
+
+          echo "::add-mask::$value"
+
+          {
+            echo "$key<<EOF"
+            echo "$value"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+        done
 
     - name: Cleanup
       shell: bash
