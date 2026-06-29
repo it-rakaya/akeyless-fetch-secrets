@@ -16,21 +16,21 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Akeyless Action
-        uses: ./
+        uses: it-rakaya/akeyless-fetch-secrets-action@main
         with:
           access-id: ${{ secrets.AKEYLESS_ACCESS_ID }}
           access-key: ${{ secrets.AKEYLESS_ACCESS_KEY }}
-          secret-path: /github-actions
+          secret-path: github-actions
 
       - name: Verify secrets were exported
         shell: bash
         run: |
           echo "Checking required variables..."
-          test -n "$SSH_HOST"
-          echo "✓ SSH_HOST is set"
+          test -n "$SSH_USERNAME"
+          echo "✓ SSH_USERNAME is set"
 
       - name: Verify masking
         shell: bash
         run: |
           echo "These values should appear as *** in logs"
-          echo "$SSH_HOST"
+          echo "$SSH_USERNAME"

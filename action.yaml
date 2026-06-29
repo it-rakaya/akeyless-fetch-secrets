@@ -59,20 +59,23 @@ runs:
 
         echo "::add-mask::$SECRET_JSON"
 
-        while IFS= read -r line; do
-          key="${line%%=*}"
-          value="${line#*=}"
-          # mask the full value
-          echo "::add-mask::$value"
-          # mask each individual line 
-          while IFS= read -r vline; do
-            [ -n "$vline" ] && echo "::add-mask::$vline"
+        for key in $(echo "$SECRET_JSON" | jq -r 'keys[]'); do
+          value=$(echo "$SECRET_JSON" | jq -r --arg key "$key" '.[$key]')
+
+          # Mask the full value
+          while IFS= read -r line; do
+            [ -n "$line" ] && echo "::add-mask::$line"
           done <<< "$value"
-          printf '%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
-        done < <(echo "$SECRET_JSON" | jq -r 'to_entries[] | "\(.key)=\(.value)"')
+
+          {
+            echo "$key<<EOF"
+            echo "$value"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+        done
 
     - name: Cleanup
-      if: always()
       shell: bash
       run: |
         echo "AKEYLESS_TOKEN=" >> "$GITHUB_ENV"
