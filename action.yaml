@@ -17,6 +17,28 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Validate inputs
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        if [[ -z "${{ inputs.access-id }}" ]]; then
+          echo "::error::access-id is required and cannot be empty"
+          exit 1
+        fi
+
+        if [[ -z "${{ inputs.access-key }}" ]]; then
+          echo "::error::access-key is required and cannot be empty"
+          exit 1
+        fi
+
+        if [[ -z "${{ inputs.secret-path }}" ]]; then
+          echo "::error::secret-path is required and cannot be empty"
+          exit 1
+        fi
+
+        echo "Input validation passed."
+
     - name: Authenticate with Akeyless
       shell: bash
       env:
