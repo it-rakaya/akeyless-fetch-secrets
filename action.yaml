@@ -67,15 +67,30 @@ runs:
         SECRET_PATH: ${{ inputs.secret-path }}
         OUTPUT_FILE: ${{ inputs.output-file }}
       run: |
-        SECRET_JSON=$(curl -sf -X POST "https://api.akeyless.io/get-secret-value" \
+        HTTP_RESPONSE=$(curl -s -w '\n%{http_code}' -X POST "https://api.akeyless.io/get-secret-value" \
           -H "Content-Type: application/json" \
           -d "{
             \"names\": [\"${SECRET_PATH}\"],
             \"token\": \"${AKEYLESS_TOKEN}\"
-          }" | jq -c -r --arg path "$SECRET_PATH" '.[$path]')
+          }")
+          
+        HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n1)
+        HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
+
+        if [ "$HTTP_STATUS" = "404" ]; then
+          echo "::error::Secret path '${SECRET_PATH}' was not found in Akeyless (HTTP 404). Check that secret-path is spelled correctly and exists."
+          exit 1
+        fi
+
+        if [ "$HTTP_STATUS" -ge 400 ] 2>/dev/null; then
+          echo "::error::Akeyless API returned HTTP ${HTTP_STATUS} while fetching '${SECRET_PATH}': ${HTTP_BODY}"
+          exit 1
+        fi
+
+        SECRET_JSON=$(echo "$HTTP_BODY" | jq -c -r --arg path "$SECRET_PATH" '.[$path]' 2>/dev/null)
 
         if [ -z "$SECRET_JSON" ] || [ "$SECRET_JSON" = "null" ]; then
-          echo "::error::Failed to fetch secret: ${SECRET_PATH}"
+          echo "::error::Secret path '${SECRET_PATH}' was not found in the Akeyless response. Verify secret-path is correct."
           exit 1
         fi
 
